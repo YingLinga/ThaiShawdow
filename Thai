@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Thai Shadowing Pro</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --accent: #38bdf8;
+    --accent2: #f43f5e; --text: #f8fafc; --sub: #94a3b8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 16px; padding-bottom: 90px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  h1 { font-size: 1.25rem; margin: 6px 0 10px; display: flex; justify-content: space-between; align-items: center; }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10; background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(8px); padding: 10px 0; border-bottom: 1px solid #334155;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center;
+  }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; width: 100%; padding-bottom: 6px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    background: var(--card); color: var(--sub); border: 1px solid #334155;
+    padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; white-space: nowrap; cursor: pointer;
+  }
+  .tab.active { background: var(--accent); color: #0f172a; font-weight: 700; border-color: var(--accent); }
+  .controls-bar { display: flex; gap: 8px; width: 100%; align-items: center; justify-content: space-between; margin-top: 2px; }
+  .btn-toggle {
+    background: #334155; color: var(--text); border: none; padding: 6px 10px;
+    border-radius: 8px; font-size: 0.8rem; cursor: pointer;
+  }
+  .btn-toggle.on { background: #10b981; color: #052e16; font-weight: 700; }
+  .card {
+    background: var(--card); border-radius: 14px; padding: 16px; margin-top: 14px;
+    border: 1px solid #334155; transition: transform 0.15s;
+  }
+  .card.playing { border-color: var(--accent); box-shadow: 0 0 12px rgba(56, 189, 248, 0.25); }
+  .cat-badge {
+    display: inline-block; font-size: 0.72rem; background: #334155; color: #cbd5e1;
+    padding: 2px 8px; border-radius: 10px; margin-bottom: 6px;
+  }
+  .thai-text {
+    font-size: 1.5rem; font-weight: 600; line-height: 1.5; color: #fff;
+    margin-bottom: 8px; letter-spacing: 0.5px;
+  }
+  .chunk-word {
+    display: inline-block; background: rgba(56, 189, 248, 0.15);
+    border-bottom: 2px solid var(--accent); padding: 0 5px; margin: 2px 3px; border-radius: 4px;
+  }
+  .rom-text { font-size: 0.92rem; color: #38bdf8; margin-bottom: 6px; font-family: monospace; }
+  .zh-text { font-size: 1.02rem; color: #f1f5f9; font-weight: 600; margin-bottom: 6px; }
+  .breakdown { font-size: 0.8rem; color: var(--sub); background: #0f172a; padding: 8px; border-radius: 8px; margin-bottom: 12px; line-height: 1.4; }
+  .action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn {
+    flex: 1; padding: 10px 8px; border: none; border-radius: 10px; font-size: 0.88rem;
+    font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .btn-play { background: var(--accent); color: #0f172a; }
+  .btn-loop { background: #334155; color: var(--text); }
+  .btn-loop.active { background: #f59e0b; color: #0f172a; }
+  .btn-rec { background: #334155; color: var(--text); }
+  .btn-rec.recording { background: var(--accent2); color: #fff; animation: pulse 1s infinite; }
+  @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<h1 id="appTitle"></h1>
+
+<div class="toolbar">
+  <div class="tabs" id="categoryTabs"></div>
+  <div class="controls-bar">
+    <div>
+      <button class="btn-toggle on" id="chunkBtn" onclick="toggleChunks()"></button>
+      <button class="btn-toggle on" id="romBtn" onclick="toggleRom()"></button>
+    </div>
+    <div>
+      <button class="btn-toggle" id="speedBtn" onclick="cycleSpeed()"></button>
+    </div>
+  </div>
+</div>
+
+<div id="sentenceList"></div>
+
+<script>
+const UI = {
+  title: "\uD83C\uDDF9\uD83C\uDDED \u6CF0\u6587\u89C0\u5149 & \u64A9\u59B9 Shadowing",
+  all: "\u5168\u90E8 (34)",
+  chunkOn: "\u2702\uFE0F \u8996\u89BA\u65B7\u8A5E: \u958B",
+  chunkOff: "\u2702\uFE0F \u8996\u89BA\u65B7\u8A5E: \u95DC",
+  romOn: "\uD83D\uDD24 \u62FC\u97F3: \u958B",
+  romOff: "\uD83D\uDD24 \u62FC\u97F3: \u95DC",
+  speed: "\u8A9E\u901F",
+  notePrefix: "\uD83D\uDCA1 \u62C6\u89E3\uFF1A",
+  play: "\uD83D\uDD0A \u64AD\u653E",
+  loopStart: "\uD83D\uDD01 \u5FAA\u74B0",
+  loopStop: "\u23F9 \u505C\u6B62",
+  recStart: "\uD83C\uDFA4 \u9304\u97F3",
+  recStop: "\u23F9 \u505C\u6B62",
+  playSelf: "\u25B6\uFE0F \u807D\u81EA\u5DF1",
+  micErr: "\u8ACB\u5141\u8A31\u9EA5\u514B\u98A8\u6B0A\u9650\u4EE5\u9032\u884C\u8DDF\u8B80\u9304\u97F3\u6BD4\u5C0D\uFF01"
+};
+
+const CAT = {
+  flirt: "\uD83D\uDC98 \u8A87\u734E/\u64A9\u59B9",
+  food: "\uD83C\uDF5C \u9EDE\u9910/\u8A87\u597D\u5403",
+  hotel: "\uD83C\uDFE8 \u98EF\u5E97\u5165\u4F4F",
+  travel: "\uD83D\uDE95 \u4EA4\u901A/\u8CFC\u7269/\u6309\u6469"
+};
+
+const phrases = [
+  // === 誇獎與撩妹 (Flirt & Compliments) ===
+  {
+    cat: CAT.flirt,
+    th: "\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49 | \u0E2A\u0E27\u0E22\u0E08\u0E31\u0E07 | \u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "wan-n\u00EDi | s\u01D4ai-jang | loei-khr\u00E1p",
+    zh: "\u59B3\u4ECA\u5929\u597D\u6F02\u4EAE\uFF01",
+    note: "\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49(\u4ECA\u5929) \u0E2A\u0E27\u0E22(\u6F02\u4EAE) \u0E08\u0E31\u0E07\u0E40\u0E25\u0E22(\u975E\u5E38/\u597D...)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E19\u0E48\u0E32\u0E23\u0E31\u0E01 | \u0E21\u0E32\u0E01\u0E46 | \u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "n\u00E2a-r\u00E1k | m\u00E2ak-m\u00E2ak | loei-khr\u00E1p",
+    zh: "\u771F\u7684\u8D85\u7D1A\u53EF\u611B\uFF01",
+    note: "\u0E19\u0E48\u0E32\u0E23\u0E31\u0E01(\u53EF\u611B) \u0E21\u0E32\u0E01\u0E46(\u975E\u5E38\u591A)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E22\u0E34\u0E49\u0E21\u0E2A\u0E27\u0E22 | \u0E08\u0E31\u0E07\u0E04\u0E23\u0E31\u0E1A",
+    rom: "y\u00EDm-s\u01D4ai | jang-khr\u00E1p",
+    zh: "\u59B3\u7684\u7B11\u5BB9\u597D\u7F8E",
+    note: "\u0E22\u0E34\u0E49\u0E21(\u5FAE\u7B11) \u0E2A\u0E27\u0E22(\u6F02\u4EAE) \u0E08\u0E31\u0E07(\u771F...)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E17\u0E35\u0E48\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E41\u0E1F\u0E19 | \u0E01\u0E47\u0E40\u0E1E\u0E23\u0E32\u0E30 | \u0E40\u0E18\u0E2D\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01\u0E1C\u0E21\u0E44\u0E07",
+    rom: "th\u00EEi-yang-m\u00E2i-mii-faen | k\u00F4-phr\u00F3 | thoe-yang-m\u00E2i-r\u00FAu-j\u00E0k-ph\u01D2m-ngai",
+    zh: "\u6C92\u5C0D\u8C61\u662F\u56E0\u70BA\u59B3\u9084\u6C92\u8A8D\u8B58\u6211\u554A",
+    note: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E41\u0E1F\u0E19(\u9084\u6C92\u5C0D\u8C61) \u0E01\u0E47\u0E40\u0E1E\u0E23\u0E32\u0E30(\u5C31\u662F\u56E0\u70BA) \u0E23\u0E39\u0E49\u0E08\u0E31\u0E01(\u8A8D\u8B58)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E22\u0E2D\u0E21\u0E43\u0E2B\u0E49\u0E40\u0E18\u0E2D | \u0E17\u0E33\u0E1C\u0E34\u0E14\u0E01\u0E0E\u0E2A\u0E27\u0E23\u0E23\u0E04\u0E4C | \u0E21\u0E32\u0E23\u0E31\u0E01\u0E01\u0E31\u0E1A\u0E1C\u0E21 | \u0E01\u0E47\u0E44\u0E14\u0E49\u0E19\u0E30",
+    rom: "y\u00F2m-h\u00E2i-thoe | tham-ph\u00ECt-k\u00F2t-s\u00E0-w\u01CEn | maa-r\u00E1k-k\u00E0p-ph\u01D2m | k\u00F4-d\u00E2i-n\u00E1",
+    zh: "\u8B93\u59B3\u89F8\u72AF\u5929\u898F\u8DDF\u6211\u8AC7\u6200\u611B\u4E5F\u53EF\u4EE5\u5594",
+    note: "\u0E22\u0E2D\u0E21\u0E43\u0E2B\u0E49(\u5BB9\u8A31/\u8B93) \u0E1C\u0E34\u0E14\u0E01\u0E0E\u0E2A\u0E27\u0E23\u0E23\u0E04\u0E4C(\u72AF\u5929\u898F) \u0E21\u0E32\u0E23\u0E31\u0E01(\u4F86\u76F8\u611B)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E21\u0E35\u0E41\u0E1F\u0E19 | \u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E31\u0E07 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "mii-faen | r\u01D4e-yang | khr\u00E1p",
+    zh: "\u59B3\u6709\u7537\u670B\u53CB\u4E86\u55CE\uFF1F",
+    note: "\u0E21\u0E35(\u6709) \u0E41\u0E1F\u0E19(\u5C0D\u8C61) \u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E31\u0E07(\u4E86\u6C92)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E08\u0E35\u0E1A | \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "j\u00ECip | d\u00E2i-m\u01CEi | khr\u00E1p",
+    zh: "\u53EF\u4EE5\u8FFD\u59B3\u55CE\uFF1F\uFF08\u6CF0\u570B\u6700\u7D93\u5178\u76F4\u7403\uFF09",
+    note: "\u0E08\u0E35\u0E1A(\u8FFD\u6C42/\u64A9) \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21(\u53EF\u4EE5\u55CE)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E2A\u0E40\u0E1B\u0E04 | \u0E1C\u0E21\u0E40\u0E25\u0E22 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "s\u00E0-p\u00E9k | ph\u01D2m-loei | khr\u00E1p",
+    zh: "\u59B3\u5B8C\u5168\u662F\u6211\u7684\u83DC\uFF01",
+    note: "\u0E2A\u0E40\u0E1B\u0E04(Spec/\u7406\u60F3\u578B) \u0E1C\u0E21(\u6211) \u0E40\u0E25\u0E22(\u5B8C\u5168\u662F)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E02\u0E2D | \u0E44\u0E2D\u0E08\u0E35 | \u0E2B\u0E19\u0E48\u0E2D\u0E22 | \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21\u0E04\u0E23\u0E31\u0E1A",
+    rom: "kh\u01CEw | ai-jii | n\u00F2i | d\u00E2i-m\u01CEi-khr\u00E1p",
+    zh: "\u53EF\u4EE5\u8DDF\u59B3\u8981\u500B IG \u55CE\uFF1F",
+    note: "\u0E02\u0E2D(\u8981) \u0E44\u0E2D\u0E08\u0E35(IG) \u0E2B\u0E19\u0E48\u0E2D\u0E22(\u4E00\u4E0B)"
+  },
+  {
+    cat: CAT.flirt,
+    th: "\u0E04\u0E38\u0E22\u0E14\u0E49\u0E27\u0E22 | \u0E41\u0E25\u0E49\u0E27\u0E2A\u0E1A\u0E32\u0E22\u0E43\u0E08 | \u0E08\u0E31\u0E07\u0E04\u0E23\u0E31\u0E1A",
+    rom: "khui-d\u00FBai | l\u00E1ew-s\u00E0-baai-jai | jang-khr\u00E1p",
+    zh: "\u8DDF\u59B3\u804A\u5929\u89BA\u5F97\u597D\u958B\u5FC3\u8212\u670D",
+    note: "\u0E04\u0E38\u0E22\u0E14\u0E49\u0E27\u0E22(\u4E00\u8D77\u804A) \u0E2A\u0E1A\u0E32\u0E22\u0E43\u0E08(\u8212\u5FC3/\u6109\u5FEB)"
+  },
+
+  // === 點餐與誇東西好吃 (Food & Delicious) ===
+  {
+    cat: CAT.food,
+    th: "\u0E2D\u0E23\u0E48\u0E2D\u0E22 | \u0E21\u0E32\u0E01\u0E46 | \u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "a-r\u00F2i | m\u00E2ak-m\u00E2ak | loei-khr\u00E1p",
+    zh: "\u771F\u7684\u8D85\u7D1A\u597D\u5403\uFF01",
+    note: "\u0E2D\u0E23\u0E48\u0E2D\u0E22(\u597D\u5403) \u0E21\u0E32\u0E01\u0E46(\u975E\u5E38)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E2D\u0E23\u0E48\u0E2D\u0E22 | \u0E2A\u0E38\u0E14\u0E46 | \u0E44\u0E1B\u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "a-r\u00F2i | s\u00F9t-s\u00F9t | pai-loei-khr\u00E1p",
+    zh: "\u597D\u5403\u5230\u7206\uFF01\uFF08\u8001\u95C6\u807D\u4E86\u6703\u8D85\u723D\uFF09",
+    note: "\u0E2A\u0E38\u0E14\u0E46(\u6975\u81F4/\u8D85\u7D1A) \u0E44\u0E1B\u0E40\u0E25\u0E22(\u5230\u5E95\u4E86)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E41\u0E0B\u0E48\u0E1A | \u0E21\u0E32\u0E01\u0E04\u0E23\u0E31\u0E1A",
+    rom: "s\u00E2ep | m\u00E2ak-khr\u00E1p",
+    zh: "\u8D85\u5920\u5473\u3001\u8D85\u6B63\u9EDE\uFF01\uFF08\u5403\u9178\u8FA3\u6CF0\u83DC\u5FC5\u8B1B\uFF09",
+    note: "\u0E41\u0E0B\u0E48\u0E1A(\u6771\u5317\u8A71\u7684\u597D\u5403\u5920\u5473\uFF0C\u5168\u6CF0\u901A\u7528)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E2B\u0E2D\u0E21 | \u0E19\u0E48\u0E32\u0E01\u0E34\u0E19 | \u0E21\u0E32\u0E01\u0E04\u0E23\u0E31\u0E1A",
+    rom: "h\u01CEwm | n\u00E2a-kin | m\u00E2ak-khr\u00E1p",
+    zh: "\u597D\u9999\u3001\u770B\u8D77\u4F86\u8D85\u8A98\u4EBA\uFF01",
+    note: "\u0E2B\u0E2D\u0E21(\u9999) \u0E19\u0E48\u0E32\u0E01\u0E34\u0E19(\u770B\u8D77\u4F86\u5F88\u597D\u5403)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E2D\u0E31\u0E19\u0E19\u0E35\u0E49 | \u0E40\u0E1C\u0E47\u0E14 | \u0E44\u0E2B\u0E21\u0E04\u0E23\u0E31\u0E1A",
+    rom: "an-n\u00EDi | ph\u00E8t | m\u01CEi-khr\u00E1p",
+    zh: "\u9019\u500B\u6703\u8FA3\u55CE\uFF1F",
+    note: "\u0E2D\u0E31\u0E19\u0E19\u0E35\u0E49(\u9019\u500B) \u0E40\u0E1C\u0E47\u0E14(\u8FA3) \u0E44\u0E2B\u0E21(\u55CE)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E02\u0E2D | \u0E40\u0E1C\u0E47\u0E14\u0E19\u0E49\u0E2D\u0E22 | \u0E19\u0E30\u0E04\u0E23\u0E31\u0E1A",
+    rom: "kh\u01CEw | ph\u00E8t-n\u00F3i | n\u00E1-khr\u00E1p",
+    zh: "\u8ACB\u505A\u5FAE\u8FA3\u5C31\u597D",
+    note: "\u0E02\u0E2D(\u8ACB\u6C42) \u0E40\u0E1C\u0E47\u0E14\u0E19\u0E49\u0E2D\u0E22(\u5C11\u8FA3)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E44\u0E21\u0E48\u0E43\u0E2A\u0E48 | \u0E1C\u0E31\u0E01\u0E0A\u0E35 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "m\u00E2i-s\u00E0i | ph\u00E0k-chii | khr\u00E1p",
+    zh: "\u4E0D\u8981\u52A0\u9999\u83DC",
+    note: "\u0E44\u0E21\u0E48\u0E43\u0E2A\u0E48(\u4E0D\u653E) \u0E1C\u0E31\u0E01\u0E0A\u0E35(\u9999\u83DC)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E2B\u0E27\u0E32\u0E19\u0E19\u0E49\u0E2D\u0E22 | \u0E41\u0E01\u0E49\u0E27\u0E2B\u0E19\u0E36\u0E48\u0E07 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "w\u01CEan-n\u00F3i | k\u00E2ew-n\u00F9eng | khr\u00E1p",
+    zh: "\u4E00\u676F\u5FAE\u7CD6",
+    note: "\u0E2B\u0E27\u0E32\u0E19\u0E19\u0E49\u0E2D\u0E22(\u5C11\u751C) \u0E41\u0E01\u0E49\u0E27\u0E2B\u0E19\u0E36\u0E48\u0E07(\u4E00\u676F)"
+  },
+  {
+    cat: CAT.food,
+    th: "\u0E40\u0E01\u0E47\u0E1A\u0E15\u0E31\u0E07\u0E04\u0E4C | \u0E14\u0E49\u0E27\u0E22 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "k\u00E8p-tang | d\u00FBai | khr\u00E1p",
+    zh: "\u9EBB\u7169\u8CB7\u55AE\uFF08\u9053\u5730\u53E3\u8A9E\uFF09",
+    note: "\u0E40\u0E01\u0E47\u0E1A\u0E15\u0E31\u0E07\u0E04\u0E4C(\u6536\u9322/\u7D50\u5E33) \u0E14\u0E49\u0E27\u0E22(\u4E5F/\u8ACB)"
+  },
+
+  // === 飯店 Check-in / Check-out (Hotel) ===
+  {
+    cat: CAT.hotel,
+    th: "\u0E21\u0E32 | \u0E40\u0E0A\u0E47\u0E04\u0E2D\u0E34\u0E19 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "maa | ch\u00E9k-in | khr\u00E1p",
+    zh: "\u6211\u8981\u8FA6\u7406\u5165\u4F4F (Check-in)",
+    note: "\u0E21\u0E32(\u4F86) \u0E40\u0E0A\u0E47\u0E04\u0E2D\u0E34\u0E19(Check-in)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E08\u0E2D\u0E07\u0E44\u0E27\u0E49 | \u0E0A\u0E37\u0E48\u0E2D | ... | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "j\u01CEwng-w\u00E1i | ch\u00FBee | ... | khr\u00E1p",
+    zh: "\u6211\u6709\u9810\u8A02\uFF0C\u540D\u5B57\u662F...",
+    note: "\u0E08\u0E2D\u0E07\u0E44\u0E27\u0E49(\u5DF2\u9810\u8A02) \u0E0A\u0E37\u0E48\u0E2D(\u540D\u5B57\uFF0C\u5F8C\u63A5\u8B77\u7167\u82F1\u6587\u59D3\u540D)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E1D\u0E32\u0E01\u0E01\u0E23\u0E30\u0E40\u0E1B\u0E4B\u0E32 | \u0E44\u0E27\u0E49\u0E01\u0E48\u0E2D\u0E19 | \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21\u0E04\u0E23\u0E31\u0E1A",
+    rom: "f\u00E0ak-kr\u00E0-p\u01CEo | w\u00E1i-k\u00F2n | d\u00E2i-m\u01CEi-khr\u00E1p",
+    zh: "\u53EF\u4EE5\u5148\u5BC4\u653E\u884C\u674E\u55CE\uFF1F",
+    note: "\u0E1D\u0E32\u0E01(\u5BC4\u653E) \u0E01\u0E23\u0E30\u0E40\u0E1B\u0E4B\u0E32(\u884C\u674E\u7BB1/\u5305) \u0E44\u0E27\u0E49\u0E01\u0E48\u0E2D\u0E19(\u5148\u653E\u8457)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E2D\u0E32\u0E2B\u0E32\u0E23\u0E40\u0E0A\u0E49\u0E32 | \u0E01\u0E35\u0E48\u0E42\u0E21\u0E07 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "aa-h\u01CEan-ch\u00E1o | k\u00ECi-moong | khr\u00E1p",
+    zh: "\u65E9\u9910\u662F\u5E7E\u9EDE\uFF1F",
+    note: "\u0E2D\u0E32\u0E2B\u0E32\u0E23\u0E40\u0E0A\u0E49\u0E32(\u65E9\u9910) \u0E01\u0E35\u0E48\u0E42\u0E21\u0E07(\u5E7E\u9EDE)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E23\u0E2B\u0E31\u0E2A | \u0E44\u0E27\u0E44\u0E1F | \u0E2D\u0E30\u0E44\u0E23\u0E04\u0E23\u0E31\u0E1A",
+    rom: "r\u00E0-h\u00E0t | wai-fai | a-rai-khr\u00E1p",
+    zh: "Wi-Fi \u5BC6\u78BC\u662F\u4EC0\u9EBC\uFF1F",
+    note: "\u0E23\u0E2B\u0E31\u0E2A(\u5BC6\u78BC) \u0E44\u0E27\u0E44\u0E1F(Wi-Fi) \u0E2D\u0E30\u0E44\u0E23(\u4EC0\u9EBC)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E21\u0E32 | \u0E40\u0E0A\u0E47\u0E04\u0E40\u0E2D\u0E32\u0E17\u0E4C | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "maa | ch\u00E9k-ao | khr\u00E1p",
+    zh: "\u6211\u8981\u8FA6\u7406\u9000\u623F (Check-out)",
+    note: "\u0E21\u0E32(\u4F86) \u0E40\u0E0A\u0E47\u0E04\u0E40\u0E2D\u0E32\u0E17\u0E4C(Check-out)"
+  },
+  {
+    cat: CAT.hotel,
+    th: "\u0E0A\u0E48\u0E27\u0E22\u0E40\u0E23\u0E35\u0E22\u0E01 | \u0E41\u0E17\u0E47\u0E01\u0E0B\u0E35\u0E48 | \u0E43\u0E2B\u0E49\u0E2B\u0E19\u0E48\u0E2D\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "ch\u00FBai-r\u00EEak | th\u00E9k-s\u00EEi | h\u00E2i-n\u00F2i-khr\u00E1p",
+    zh: "\u8ACB\u5E6B\u6211\u53EB\u4E00\u53F0\u8A08\u7A0B\u8ECA",
+    note: "\u0E0A\u0E48\u0E27\u0E22(\u5E6B\u5FD9) \u0E40\u0E23\u0E35\u0E22\u0E01(\u53EB) \u0E43\u0E2B\u0E49\u0E2B\u0E19\u0E48\u0E2D\u0E22(\u7D66\u6211\u4E00\u4E0B)"
+  },
+
+  // === 交通 / 購物 / 按摩 (Travel, Shopping, Massage) ===
+  {
+    cat: CAT.travel,
+    th: "\u0E44\u0E1B\u0E2A\u0E48\u0E07 | \u0E17\u0E35\u0E48\u0E19\u0E35\u0E48 | \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21\u0E04\u0E23\u0E31\u0E1A",
+    rom: "pai-s\u00F2ng | th\u00EEi-n\u00EEi | d\u00E2i-m\u01CEi-khr\u00E1p",
+    zh: "\u53EF\u4EE5\u8F09\u6211\u53BB\u9019\u88E1\u55CE\uFF1F",
+    note: "\u0E44\u0E1B\u0E2A\u0E48\u0E07(\u9001\u53BB) \u0E17\u0E35\u0E48\u0E19\u0E35\u0E48(\u9019\u88E1)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E08\u0E2D\u0E14 | \u0E15\u0E23\u0E07\u0E19\u0E35\u0E49 | \u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "j\u00F2t | trong-n\u00EDi | loei-khr\u00E1p",
+    zh: "\u5C31\u5728\u9019\u88E1\u505C\u8ECA",
+    note: "\u0E08\u0E2D\u0E14(\u505C) \u0E15\u0E23\u0E07\u0E19\u0E35\u0E49(\u9019\u88E1) \u0E40\u0E25\u0E22(\u76F4\u63A5)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E02\u0E36\u0E49\u0E19 | \u0E17\u0E32\u0E07\u0E14\u0E48\u0E27\u0E19 | \u0E40\u0E25\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "kh\u00FBen | thaang-d\u00F9an | loei-khr\u00E1p",
+    zh: "\u76F4\u63A5\u4E0A\u9AD8\u901F\u516C\u8DEF\u5427",
+    note: "\u0E02\u0E36\u0E49\u0E19(\u4E0A) \u0E17\u0E32\u0E07\u0E14\u0E48\u0E27\u0E19(\u9AD8\u901F\u516C\u8DEF)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E2B\u0E49\u0E2D\u0E07\u0E19\u0E49\u0E33 | \u0E2D\u0E22\u0E39\u0E48 | \u0E17\u0E35\u0E48\u0E44\u0E2B\u0E19\u0E04\u0E23\u0E31\u0E1A",
+    rom: "h\u00F4ng-n\u00E1am | y\u00F9u | th\u00EEi-n\u01CEi-khr\u00E1p",
+    zh: "\u6D17\u624B\u9593\u5728\u54EA\u88E1\uFF1F",
+    note: "\u0E2B\u0E49\u0E2D\u0E07\u0E19\u0E49\u0E33(\u5EC1\u6240) \u0E2D\u0E22\u0E39\u0E48(\u5728) \u0E17\u0E35\u0E48\u0E44\u0E2B\u0E19(\u54EA\u88E1)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E2D\u0E31\u0E19\u0E19\u0E35\u0E49 | \u0E23\u0E32\u0E04\u0E32 | \u0E40\u0E17\u0E48\u0E32\u0E44\u0E2B\u0E23\u0E48\u0E04\u0E23\u0E31\u0E1A",
+    rom: "an-n\u00EDi | raa-khaa | th\u00E2o-r\u00E0i-khr\u00E1p",
+    zh: "\u9019\u500B\u591A\u5C11\u9322\uFF1F",
+    note: "\u0E23\u0E32\u0E04\u0E32(\u50F9\u683C) \u0E40\u0E17\u0E48\u0E32\u0E44\u0E2B\u0E23\u0E48(\u591A\u5C11)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E25\u0E14\u0E2B\u0E19\u0E48\u0E2D\u0E22 | \u0E44\u0E14\u0E49\u0E44\u0E2B\u0E21\u0E04\u0E23\u0E31\u0E1A",
+    rom: "l\u00F3t-n\u00F2i | d\u00E2i-m\u01CEi-khr\u00E1p",
+    zh: "\u53EF\u4EE5\u7B97\u4FBF\u5B9C\u4E00\u9EDE\u55CE\uFF1F",
+    note: "\u0E25\u0E14(\u964D\u50F9) \u0E2B\u0E19\u0E48\u0E2D\u0E22(\u4E00\u9EDE\u9EDE)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E19\u0E27\u0E14\u0E40\u0E17\u0E49\u0E32 | \u0E2B\u0E19\u0E36\u0E48\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07 | \u0E04\u0E23\u0E31\u0E1A",
+    rom: "n\u00FBat-th\u00E1o | n\u00F9eng-ch\u00FBa-moong | khr\u00E1p",
+    zh: "\u8173\u5E95\u6309\u6469\u4E00\u5C0F\u6642",
+    note: "\u0E19\u0E27\u0E14\u0E40\u0E17\u0E49\u0E32(\u6309\u8173) \u0E2B\u0E19\u0E36\u0E48\u0E07\u0E0A\u0E31\u0E48\u0E27\u0E42\u0E21\u0E07(\u4E00\u5C0F\u6642)"
+  },
+  {
+    cat: CAT.travel,
+    th: "\u0E40\u0E1A\u0E32\u0E46 | \u0E2B\u0E19\u0E48\u0E2D\u0E22\u0E04\u0E23\u0E31\u0E1A / \u0E2B\u0E19\u0E31\u0E01\u0E46 | \u0E2B\u0E19\u0E48\u0E2D\u0E22\u0E04\u0E23\u0E31\u0E1A",
+    rom: "bao-bao n\u00F2i khr\u00E1p / n\u00E0k-n\u00E0k n\u00F2i khr\u00E1p",
+    zh: "\u8ACB\u8F15\u4E00\u9EDE \uFF0F \u8ACB\u91CD\u4E00\u9EDE\uFF08\u6309\u6469\u529B\u9053\uFF09",
+    note: "\u0E40\u0E1A\u0E32\u0E46(\u8F15\u8F15\u5730) \uFF0F \u0E2B\u0E19\u0E31\u0E01\u0E46(\u91CD\u91CD\u5730)"
+  }
+];
+
+let currentCat = UI.all;
+let showChunks = true;
+let showRom = true;
+let speeds = [0.8, 0.5, 1.0];
+let speedIdx = 0;
+let loopingIdx = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let recordedBlobs = {};
+
+function init() {
+  document.getElementById("appTitle").textContent = UI.title;
+  document.getElementById("chunkBtn").textContent = showChunks ? UI.chunkOn : UI.chunkOff;
+  document.getElementById("romBtn").textContent = showRom ? UI.romOn : UI.romOff;
+  updateSpeedBtn();
+
+  const cats = [UI.all, CAT.flirt, CAT.food, CAT.hotel, CAT.travel];
+  const tabContainer = document.getElementById("categoryTabs");
+  tabContainer.innerHTML = cats.map(c => 
+    `<button class="tab ${c === currentCat ? 'active' : ''}" onclick="setCat('${c}')">${c}</button>`
+  ).join("");
+  renderList();
+}
+
+function setCat(cat) {
+  stopLoop();
+  currentCat = cat;
+  init();
+}
+
+function toggleChunks() {
+  showChunks = !showChunks;
+  const btn = document.getElementById("chunkBtn");
+  btn.textContent = showChunks ? UI.chunkOn : UI.chunkOff;
+  btn.classList.toggle("on", showChunks);
+  renderList();
+}
+
+function toggleRom() {
+  showRom = !showRom;
+  const btn = document.getElementById("romBtn");
+  btn.textContent = showRom ? UI.romOn : UI.romOff;
+  btn.classList.toggle("on", showRom);
+  renderList();
+}
+
+function updateSpeedBtn() {
+  const s = speeds[speedIdx];
+  const icon = s === 1.0 ? "\uD83D\uDC07" : (s === 0.8 ? "\uD83D\uDC22" : "\uD83D\uDC0C");
+  document.getElementById("speedBtn").textContent = `${icon} ${UI.speed}: ${s}x`;
+}
+
+function cycleSpeed() {
+  speedIdx = (speedIdx + 1) % speeds.length;
+  updateSpeedBtn();
+}
+
+function formatThai(thStr) {
+  if (!showChunks) return thStr.replace(/\s*\|\s*/g, "");
+  return thStr.split("|").map(w => `<span class="chunk-word">${w.trim()}</span>`).join("");
+}
+
+function renderList() {
+  const list = document.getElementById("sentenceList");
+  const filtered = currentCat === UI.all ? phrases : phrases.filter(p => p.cat === currentCat);
+  list.innerHTML = filtered.map((item, idx) => {
+    const rawThai = item.th.replace(/\s*\|\s*/g, "").replace(/\.\.\./g, "");
+    const isLooping = loopingIdx === idx;
+    return `
+      <div class="card ${isLooping ? 'playing' : ''}" id="card-${idx}">
+        <div class="cat-badge">${item.cat}</div>
+        <div class="thai-text">${formatThai(item.th)}</div>
+        ${showRom ? `<div class="rom-text">${item.rom}</div>` : ''}
+        <div class="zh-text">${item.zh}</div>
+        <div class="breakdown">${UI.notePrefix}${item.note}</div>
+        <div class="action-row">
+          <button class="btn btn-play" onclick="speakThai('${rawThai}', ${idx}, false)">${UI.play}</button>
+          <button class="btn btn-loop ${isLooping ? 'active' : ''}" id="loop-${idx}" onclick="toggleLoop('${rawThai}', ${idx})">
+            ${isLooping ? UI.loopStop : UI.loopStart}
+          </button>
+          <button class="btn btn-rec" id="rec-${idx}" onclick="toggleRecord(${idx})">${UI.recStart}</button>
+          <button class="btn btn-loop" id="playrec-${idx}" style="display:${recordedBlobs[idx] ? 'flex':'none'}" onclick="playRecorded(${idx})">${UI.playSelf}</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function speakThai(text, idx, isLoop) {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "th-TH";
+  utter.rate = speeds[speedIdx];
+
+  const voices = window.speechSynthesis.getVoices();
+  const thaiVoice = voices.find(v => v.lang.includes("th") || v.lang.includes("TH"));
+  if (thaiVoice) utter.voice = thaiVoice;
+
+  utter.onend = () => {
+    if (loopingIdx === idx) {
+      setTimeout(() => {
+        if (loopingIdx === idx) speakThai(text, idx, true);
+      }, 2200);
+    }
+  };
+  window.speechSynthesis.speak(utter);
+}
+
+function toggleLoop(text, idx) {
+  if (loopingIdx === idx) {
+    stopLoop();
+  } else {
+    loopingIdx = idx;
+    renderList();
+    speakThai(text, idx, true);
+  }
+}
+
+function stopLoop() {
+  loopingIdx = null;
+  window.speechSynthesis.cancel();
+  renderList();
+}
+
+async function toggleRecord(idx) {
+  const btn = document.getElementById(`rec-${idx}`);
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+    btn.classList.remove("recording");
+    btn.textContent = UI.recStart;
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      recordedBlobs[idx] = new Blob(audioChunks, { type: 'audio/mp4' });
+      stream.getTracks().forEach(t => t.stop());
+      renderList();
+    };
+    mediaRecorder.start();
+    btn.classList.add("recording");
+    btn.textContent = UI.recStop;
+  } catch (err) {
+    alert(UI.micErr);
+  }
+}
+
+function playRecorded(idx) {
+  if (!recordedBlobs[idx]) return;
+  const url = URL.createObjectURL(recordedBlobs[idx]);
+  const audio = new Audio(url);
+  audio.play();
+}
+
+window.speechSynthesis.onvoiceschanged = () => {};
+init();
+</script>
+</body>
+</html>
